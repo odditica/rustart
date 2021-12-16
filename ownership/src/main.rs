@@ -31,4 +31,23 @@ fn main() {
     let imm_str = mut_str2;
 
     println!("{}", &imm_str);
+
+    let array = [0, 1, 2, 3, 4, 5];
+    for item in array {        
+        print!("{} ", item);
+    }
+
+    print!("\n");
+    println!("Slice:");
+
+    for item in &array[0..4] {
+        print!("{} ", item);
+    }
+
+    let imm_str2 = String::from("test!");
+    println!("{} {}", imm_str2, &imm_str2[0..4]);
+
+    let imm_str_slice : &str = "&str!";
+    println!("{}", imm_str_slice);    
+
 }
