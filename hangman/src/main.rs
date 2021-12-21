@@ -14,6 +14,7 @@ struct GameState {
     score: u32,
     word_graphemes: Vec<Option<String>>,
     guess_graphemes: Vec<Option<String>>,
+    polled_message: Option<(String, time::Duration)>,
 }
 
 impl GameState {
@@ -23,6 +24,7 @@ impl GameState {
             score: 0,
             word_graphemes: vec![None; 0],
             guess_graphemes: vec![None; 0],
+            polled_message: None
         };
         new_state.next_word();
         return new_state;
@@ -38,7 +40,14 @@ impl GameState {
         *self = GameState::new();
     }
 
-    fn input_guess(&mut self, guessed_grapheme: &str) {
+    fn poll_message(&mut self, message : &str, duration : time::Duration) {
+        assert!(self.polled_message == None);
+        assert!(message.len() > 0);        
+        assert_eq!(duration.is_zero(), false);        
+        self.polled_message = Some((message.to_owned(), duration));
+    }
+    
+    fn process_logic(&mut self, guessed_grapheme: &str) {
         assert_eq!(self.lives > 0, true);
         assert_eq!(
             self.guess_graphemes.len() == self.word_graphemes.len(),
@@ -62,24 +71,19 @@ impl GameState {
             }
         }
 
-        if complete {
-            println!("{}", &self);
-            println!("✅");
-            thread::sleep(time::Duration::from_secs(2));
+        if complete {            
             self.score += 1;
             self.next_word();
+            self.poll_message("✅", time::Duration::from_secs(2));
             return;
         }
 
         if !matched {
             self.lives -= 1;
-            println!("{}", &self);
-            println!("😳");
             if self.lives == 0 {
-                self.reset();
-                thread::sleep(time::Duration::from_secs(1));
-            }
-            thread::sleep(time::Duration::from_millis(500));
+                self.reset();                
+            }            
+            self.poll_message("😳", time::Duration::from_secs(1));
         }
     }
 }
@@ -113,7 +117,16 @@ impl fmt::Display for GameState {
             }
         }
 
-        writeln!(f, "")
+        let result = writeln!(f, "")?;
+        
+        if let Some((message, duration)) = &self.polled_message {
+            let result = writeln!(f, "\n{}", message)?;
+            thread::sleep(*duration);        
+            return Ok(result);
+        };
+
+        return Ok(result);
+        
     }
 }
 
@@ -147,6 +160,10 @@ fn main() {
     let mut game_state = GameState::new();
     loop {
         println!("{}", &game_state);
-        game_state.input_guess(&get_grapheme_input());
+        if let Some(_) = game_state.polled_message {            
+            game_state.polled_message = None;
+            println!("{}", &game_state);
+        }
+        game_state.process_logic(&get_grapheme_input());
     }
 }
