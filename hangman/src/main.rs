@@ -1,25 +1,24 @@
 extern crate unicode_segmentation;
 use std::io;
+use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
 
 const LIVES_COUNT: u32 = 10;
-const EMPTY_GRAPHEME: &str = "\0";
-
 mod words;
 
 #[derive(Debug)]
 struct GameState {
     lives: u32,
     word_graphemes: Vec<String>,
-    guess_graphemes: Vec<String>,
+    guess_graphemes: Vec<Option<String>>,
 }
 
 impl GameState {
     fn new() -> GameState {
         let word_graphemes = words::get_random_word();
-        let mut guess_graphemes: Vec<String> = Vec::new();
+        let mut guess_graphemes: Vec<Option<String>> = Vec::new();
         for _ in &word_graphemes {
-            guess_graphemes.push(EMPTY_GRAPHEME.to_owned());
+            guess_graphemes.push(None);
         }
 
         let state = GameState {
@@ -31,8 +30,7 @@ impl GameState {
         return state;
     }
 
-    fn guess(&mut self, guessed_grapheme: String) {
-        println!("Guessing {}", guessed_grapheme);
+    fn guess(&mut self, guessed_grapheme: String) {        
         assert_eq!(self.lives > 0, true);
         assert_eq!(
             self.guess_graphemes.len() == self.word_graphemes.len(),
@@ -42,11 +40,11 @@ impl GameState {
         let mut missed = true;
 
         for (idx, grapheme) in self.word_graphemes.iter().enumerate() {
-            if self.guess_graphemes[idx] != EMPTY_GRAPHEME {
+            if self.guess_graphemes[idx].is_some() {
                 continue;
             }
             if *grapheme == guessed_grapheme {
-                self.guess_graphemes[idx] = guessed_grapheme.clone();
+                self.guess_graphemes[idx] = Some(guessed_grapheme.clone());
                 missed = false;
             }
         }
@@ -55,6 +53,26 @@ impl GameState {
             println!("Missed!");
             self.lives -= 1;
         }
+    }
+}
+
+impl fmt::Display for GameState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for _ in 0..(self.lives - 1) {
+            write!(f, "💘").unwrap();
+        }        
+        writeln!(f, "").unwrap();
+
+        for grapheme in self.guess_graphemes.iter() {
+            if let Some(value) = grapheme {
+                write!(f, "{}", value).unwrap();
+            } else {
+                write!(f, "_").unwrap();
+            }
+            
+        }        
+
+        writeln!(f, "")
     }
 }
 
@@ -88,6 +106,6 @@ fn main() {
 
     loop {
         game_state.guess(grab_grapheme());
-        dbg!("{:!}", &game_state);
+        println!("{}", &game_state);
     }
 }
