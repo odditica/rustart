@@ -2,7 +2,7 @@ extern crate unicode_segmentation;
 use rand::Rng;
 use unicode_segmentation::UnicodeSegmentation;
 
-const WORD_LIST: &[&'static str] = &[
+const WORD_LIST: &[&str] = &[
     "rustacean 🦀",
     "pro gaming 🎮",
     "cool 😎",

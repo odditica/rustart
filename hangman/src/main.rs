@@ -1,66 +1,99 @@
 extern crate unicode_segmentation;
+use clearscreen;
 use std::cmp;
 use std::fmt;
 use std::io;
 use std::io::Write;
-
-use clearscreen;
+use std::{thread, time};
 use unicode_segmentation::UnicodeSegmentation;
 
 mod words;
 
-#[derive(Debug)]
 struct GameState {
     lives: u32,
+    score: u32,
     word_graphemes: Vec<Option<String>>,
     guess_graphemes: Vec<Option<String>>,
 }
 
 impl GameState {
     fn new() -> GameState {
-        let word_graphemes = words::get_random_word();
-        let guess_graphemes = vec![None; word_graphemes.len()];
-        return GameState {
-            lives: cmp::max(10, (word_graphemes.len() as u32) / 2),
-            word_graphemes,
-            guess_graphemes,
+        let mut new_state = GameState {
+            lives: 0,
+            score: 0,
+            word_graphemes: vec![None; 0],
+            guess_graphemes: vec![None; 0],
         };
+        new_state.next_word();
+        return new_state;
     }
 
-    fn guess(&mut self, guessed_grapheme: String) {
+    fn next_word(&mut self) {
+        self.word_graphemes = words::get_random_word();
+        self.guess_graphemes = vec![None; self.word_graphemes.len()];
+        self.lives = cmp::max(self.lives, (self.word_graphemes.len() as u32) / 2);
+    }
+
+    fn reset(&mut self) {
+        *self = GameState::new();
+    }
+
+    fn input_guess(&mut self, guessed_grapheme: &str) {
         assert_eq!(self.lives > 0, true);
         assert_eq!(
             self.guess_graphemes.len() == self.word_graphemes.len(),
             true
         );
 
-        let mut missed = true;
+        let mut complete = true;
+        let mut matched = false;
 
         for (idx, grapheme) in self.word_graphemes.iter().enumerate() {
             if let Some(grapheme_value) = grapheme {
-                if self.guess_graphemes[idx].is_some() {
+                if let Some(_) = self.guess_graphemes[idx] {
                     continue;
                 }
                 if *grapheme_value == guessed_grapheme {
-                    self.guess_graphemes[idx] = Some(guessed_grapheme.clone());
-                    missed = false;
+                    self.guess_graphemes[idx] = Some(guessed_grapheme.to_owned());
+                    matched = true;
+                    continue;
                 }
+                complete = false;
             }
         }
 
-        if missed {
+        if complete {
+            println!("{}", &self);
+            println!("✅");
+            thread::sleep(time::Duration::from_secs(2));
+            self.score += 1;
+            self.next_word();
+            return;
+        }
+
+        if !matched {
             self.lives -= 1;
+            println!("{}", &self);
+            println!("😳");
+            if self.lives == 0 {
+                self.reset();
+                thread::sleep(time::Duration::from_secs(1));
+            }
+            thread::sleep(time::Duration::from_millis(500));
         }
     }
 }
 
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        clearscreen::clear().ok();
         write!(f, "\nLives: ")?;
 
-        for _ in 0..(self.lives - 1) {
+        for _ in 0..self.lives {
             write!(f, "💖")?;
         }
+
+        writeln!(f, "\nScore: {}", self.score)?;
 
         writeln!(f, "")?;
 
@@ -84,7 +117,8 @@ impl fmt::Display for GameState {
     }
 }
 
-fn grab_grapheme() -> String {
+// Loops until valid input is received...
+fn get_grapheme_input() -> String {
     return loop {
         print!("❓: ");
         io::stdout().flush().ok().unwrap();
@@ -111,10 +145,8 @@ fn grab_grapheme() -> String {
 
 fn main() {
     let mut game_state = GameState::new();
-
     loop {
-        clearscreen::clear().ok();
         println!("{}", &game_state);
-        game_state.guess(grab_grapheme());
+        game_state.input_guess(&get_grapheme_input());
     }
 }
