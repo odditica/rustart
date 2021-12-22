@@ -33,7 +33,7 @@ impl GameState {
     fn next_word(&mut self) {
         self.word_graphemes = words::get_random_word();
         self.guess_graphemes = vec![None; self.word_graphemes.len()];
-        self.lives = cmp::max(self.lives, (self.word_graphemes.len() as u32) / 2);
+        self.lives = cmp::max(self.lives + 4, cmp::max(8, (self.word_graphemes.len() / 2) as u32));
     }
 
     fn reset(&mut self) {
@@ -45,6 +45,18 @@ impl GameState {
         assert!(message.len() > 0);
         assert_eq!(duration.is_zero(), false);
         self.polled_message = Some((message.to_owned(), duration));
+    }
+
+    fn display(&mut self) {
+        clearscreen::clear().ok();
+        println!("{}", &self);
+        if let Some((message, duration)) = &self.polled_message {
+            println!("{}", message);
+            thread::sleep(*duration);    
+            self.polled_message = None;
+            clearscreen::clear().ok();
+            println!("{}", &self);            
+        }
     }
 
     fn process_logic(&mut self, guessed_grapheme: &str) {
@@ -90,7 +102,7 @@ impl GameState {
 
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        clearscreen::clear().ok();
+        
         write!(f, "\nLives: ")?;
 
         for _ in 0..self.lives {
@@ -117,20 +129,12 @@ impl fmt::Display for GameState {
             }
         }
 
-        let result = writeln!(f, "")?;
-
-        if let Some((message, duration)) = &self.polled_message {
-            let result = writeln!(f, "\n{}", message)?;
-            thread::sleep(*duration);
-            return Ok(result);
-        };
-
-        return Ok(result);
+        writeln!(f, "")        
     }
 }
 
-// Loops until valid input is received...
 fn get_grapheme_input() -> String {
+    // Loops until valid input is received...
     return loop {
         print!("❓: ");
         io::stdout().flush().ok().unwrap();
@@ -158,11 +162,7 @@ fn get_grapheme_input() -> String {
 fn main() {
     let mut game_state = GameState::new();
     loop {
-        println!("{}", &game_state);
-        if let Some(_) = game_state.polled_message {
-            game_state.polled_message = None;
-            println!("{}", &game_state);
-        }
+        game_state.display();
         game_state.process_logic(&get_grapheme_input());
     }
 }
