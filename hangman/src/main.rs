@@ -30,45 +30,60 @@ impl GameState {
         return new_state;
     }
 
-    fn next_word(&mut self) {
-        self.word_graphemes = words::get_random_word();
-        self.guess_graphemes = vec![None; self.word_graphemes.len()];
-        self.lives = cmp::max(self.lives + 4, cmp::max(8, (self.word_graphemes.len() / 2) as u32));
-    }
-
+    // Resets the whole game.
     fn reset(&mut self) {
         *self = GameState::new();
     }
 
-    fn poll_message(&mut self, message: &str, duration: time::Duration) {
-        assert!(self.polled_message == None);
+    // Generates a new word to guess.
+    fn next_word(&mut self) {
+        self.word_graphemes = words::get_random_word();
+        self.guess_graphemes = vec![None; self.word_graphemes.len()];
+        self.lives = cmp::max(
+            self.lives + 4,
+            cmp::max(8, (self.word_graphemes.len() / 2) as u32),
+        );
+    }
+
+    // Queues a message to be displayed the next time we... display.
+    fn queue_message(&mut self, message: &str, duration: time::Duration) {
         assert!(message.len() > 0);
+        assert_eq!(self.polled_message, None);
         assert_eq!(duration.is_zero(), false);
         self.polled_message = Some((message.to_owned(), duration));
     }
 
+    fn reveal_word(&mut self) {
+        self.guess_graphemes = self.word_graphemes.to_owned();
+    }
+
     fn display(&mut self) {
-        clearscreen::clear().ok();
-        println!("{}", &self);
-        if let Some((message, duration)) = &self.polled_message {
-            println!("{}", message);
-            thread::sleep(*duration);    
-            self.polled_message = None;
+        loop {
             clearscreen::clear().ok();
-            println!("{}", &self);            
+            println!("{}", &self);
+
+            // If there's a message, display it, wait, then hide it.
+            // Perhaps overkill, but could be easily used for an actual message queue.
+            if let Some((_, duration)) = &self.polled_message {
+                thread::sleep(*duration);
+                self.polled_message = None;
+                continue;
+            }
+
+            break;
         }
     }
 
-    fn process_logic(&mut self, guessed_grapheme: &str) {
-        assert_eq!(self.lives > 0, true);
-        assert_eq!(
-            self.guess_graphemes.len() == self.word_graphemes.len(),
-            true
-        );
+    fn logic(&mut self) {
+        // Display and ask for guess input.
+        self.display();
+        let guessed_grapheme = get_grapheme_input();
 
+        // Evaluate the guess.
         let mut complete = true;
         let mut matched = false;
 
+        assert_eq!(self.guess_graphemes.len(), self.word_graphemes.len());
         for (idx, grapheme) in self.word_graphemes.iter().enumerate() {
             if let Some(grapheme_value) = grapheme {
                 if let Some(_) = self.guess_graphemes[idx] {
@@ -84,25 +99,30 @@ impl GameState {
         }
 
         if complete {
-            self.score += 1;
+            self.score = self.score.saturating_add(self.guess_graphemes.len() as u32);
+            self.queue_message("🏆 You got it!", time::Duration::from_secs(2));
+            self.display();
             self.next_word();
-            self.poll_message("✅", time::Duration::from_secs(2));
             return;
         }
 
         if !matched {
+            assert!((self.lives > 0) && !complete);
             self.lives -= 1;
             if self.lives == 0 {
+                self.reveal_word();
+                self.queue_message("💔 Better luck next time!", time::Duration::from_secs(2));
+                self.display();
                 self.reset();
+            } else {
+                self.queue_message("😳", time::Duration::from_millis(500));
             }
-            self.poll_message("😳", time::Duration::from_secs(1));
         }
     }
 }
 
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        
         write!(f, "\nLives: ")?;
 
         for _ in 0..self.lives {
@@ -129,12 +149,17 @@ impl fmt::Display for GameState {
             }
         }
 
-        writeln!(f, "")        
+        if let Some((message, _)) = &self.polled_message {
+            write!(f, "\n\n{}", message)?;
+        }
+
+        write!(f, "")
     }
 }
 
+// Loops until valid input is received...
 fn get_grapheme_input() -> String {
-    // Loops until valid input is received...
+    println!("");
     return loop {
         print!("❓: ");
         io::stdout().flush().ok().unwrap();
@@ -162,7 +187,6 @@ fn get_grapheme_input() -> String {
 fn main() {
     let mut game_state = GameState::new();
     loop {
-        game_state.display();
-        game_state.process_logic(&get_grapheme_input());
+        game_state.logic();
     }
 }
