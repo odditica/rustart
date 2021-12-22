@@ -12,8 +12,8 @@ mod words;
 struct GameState {
     lives: u32,
     score: u32,
-    word_graphemes: Vec<Option<String>>,
-    guess_graphemes: Vec<Option<String>>,
+    word_letters: Vec<Option<String>>,
+    guess_letters: Vec<Option<String>>,
     polled_message: Option<(String, time::Duration)>,
 }
 
@@ -22,11 +22,11 @@ impl GameState {
         let mut new_state = GameState {
             lives: 0,
             score: 0,
-            word_graphemes: vec![None; 0],
-            guess_graphemes: vec![None; 0],
+            word_letters: vec![None; 0],
+            guess_letters: vec![None; 0],
             polled_message: None,
         };
-        new_state.next_word();
+        new_state.generate_new_word();
         return new_state;
     }
 
@@ -35,26 +35,25 @@ impl GameState {
         *self = GameState::new();
     }
 
-    // Generates a new word to guess.
-    fn next_word(&mut self) {
-        self.word_graphemes = words::get_random_word();
-        self.guess_graphemes = vec![None; self.word_graphemes.len()];
+    fn generate_new_word(&mut self) {
+        self.word_letters = words::get_random_word();
+        self.guess_letters = vec![None; self.word_letters.len()];
         self.lives = cmp::max(
             self.lives + 4,
-            cmp::max(8, (self.word_graphemes.len() / 2) as u32),
+            cmp::max(8, (self.word_letters.len() / 2) as u32),
         );
     }
 
-    // Queues a message to be displayed the next time we... display.
+    fn reveal_word(&mut self) {
+        self.guess_letters = self.word_letters.to_owned();
+    }
+
+    // Queues a message to be displayed the next time we call display().
     fn queue_message(&mut self, message: &str, duration: time::Duration) {
         assert!(message.len() > 0);
         assert_eq!(self.polled_message, None);
         assert_eq!(duration.is_zero(), false);
         self.polled_message = Some((message.to_owned(), duration));
-    }
-
-    fn reveal_word(&mut self) {
-        self.guess_graphemes = self.word_graphemes.to_owned();
     }
 
     fn display(&mut self) {
@@ -74,35 +73,42 @@ impl GameState {
         }
     }
 
-    fn logic(&mut self) {
+    fn update(&mut self) {
         // Display and ask for guess input.
         self.display();
-        let guessed_grapheme = get_grapheme_input();
+        let guessed_letter = get_letter_input();
 
         // Evaluate the guess.
         let mut complete = true;
         let mut matched = false;
 
-        assert_eq!(self.guess_graphemes.len(), self.word_graphemes.len());
-        for (idx, grapheme) in self.word_graphemes.iter().enumerate() {
-            if let Some(grapheme_value) = grapheme {
-                if let Some(_) = self.guess_graphemes[idx] {
-                    continue;
+        assert_eq!(self.guess_letters.len(), self.word_letters.len());
+        for (idx, hidden_letter) in self.word_letters.iter().enumerate() {
+            if let Some(hidden_letter_value) = hidden_letter {
+                match self.guess_letters[idx] {
+                    Some(_) => {
+                        if *hidden_letter_value == guessed_letter {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    None => {
+                        if *hidden_letter_value == guessed_letter {
+                            matched = true;
+                            self.guess_letters[idx] = Some(guessed_letter.to_owned());
+                            continue;
+                        }
+                        complete = false;
+                    }
                 }
-                if *grapheme_value == guessed_grapheme {
-                    self.guess_graphemes[idx] = Some(guessed_grapheme.to_owned());
-                    matched = true;
-                    continue;
-                }
-                complete = false;
             }
         }
 
         if complete {
-            self.score = self.score.saturating_add(self.guess_graphemes.len() as u32);
+            self.score = self.score.saturating_add(self.guess_letters.len() as u32);
             self.queue_message("🏆 You got it!", time::Duration::from_secs(2));
             self.display();
-            self.next_word();
+            self.generate_new_word();
             return;
         }
 
@@ -123,7 +129,7 @@ impl GameState {
 
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\nLives: ")?;
+        write!(f, "Lives: ")?;
 
         for _ in 0..self.lives {
             write!(f, "💖")?;
@@ -133,16 +139,16 @@ impl fmt::Display for GameState {
 
         writeln!(f, "")?;
 
-        for grapheme in self.guess_graphemes.iter() {
-            if let Some(value) = grapheme {
+        for letter in self.guess_letters.iter() {
+            if let Some(value) = letter {
                 write!(f, "{} ", value)?;
             } else {
                 write!(f, "  ")?;
             }
         }
         writeln!(f, "")?;
-        for grapheme in self.word_graphemes.iter() {
-            if let Some(_) = grapheme {
+        for letter in self.word_letters.iter() {
+            if let Some(_) = letter {
                 write!(f, "▔ ")?;
             } else {
                 write!(f, "  ")?;
@@ -158,7 +164,7 @@ impl fmt::Display for GameState {
 }
 
 // Loops until valid input is received...
-fn get_grapheme_input() -> String {
+fn get_letter_input() -> String {
     println!("");
     return loop {
         print!("❓: ");
@@ -174,9 +180,9 @@ fn get_grapheme_input() -> String {
             continue;
         }
 
-        let graphemes = UnicodeSegmentation::graphemes(&line[..], true).collect::<Vec<&str>>();
+        let letters = UnicodeSegmentation::graphemes(&line[..], true).collect::<Vec<&str>>();
 
-        if graphemes.len() != 1 {
+        if letters.len() != 1 {
             continue;
         }
 
@@ -187,6 +193,6 @@ fn get_grapheme_input() -> String {
 fn main() {
     let mut game_state = GameState::new();
     loop {
-        game_state.logic();
+        game_state.update();
     }
 }
